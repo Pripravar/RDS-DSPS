@@ -396,7 +396,8 @@ function renderCtx(){
 
 function objList(){
   var m=typObjMap(curStavba,curTyp);
-  return Object.keys(m).map(function(k){var o=m[k];o._id=k;return o;});
+  // pořadí klíčů = původní pořadí ze zdroje (zakládání, spodní stavba, NK, …) → _ord
+  return Object.keys(m).sort().map(function(k,i){var o=m[k];o._id=k;o._ord=i;return o;});
 }
 
 function render(){
@@ -438,7 +439,7 @@ function render(){
     if(curSort==='dur')return durDays(b,b._st)-durDays(a,a._st);
     if(curSort==='delay')return (delayDays(b,b._st)||0)-(delayDays(a,a._st)||0);
     if(curSort==='stage')return (b._st.idx)-(a._st.idx);
-    return String(a.so).localeCompare(String(b.so),'cs',{numeric:true})||String(a.cast||'').localeCompare(String(b.cast||''));
+    return String(a.so).localeCompare(String(b.so),'cs',{numeric:true})||((a._ord||0)-(b._ord||0));
   });
 
   var rows='';
@@ -670,7 +671,7 @@ if(DEMO_MODE){
       var s=j.stavby[sid];stavby[sid]={nazev:s.nazev,poradi:s.poradi||1,meta:s.meta||null};
       var typ=s.typ||'RDS';
       objekty[sid]={RDS:{},DSPS:{}};
-      (s.objekty||[]).forEach(function(o,i){objekty[sid][typ]['o'+i]=o;});
+      (s.objekty||[]).forEach(function(o,i){objekty[sid][typ]['o'+('00'+i).slice(-3)]=o;});
     });
     DATA.stavby=stavby;DATA.objekty=objekty;DATA.inbox={};
     $('demo').classList.remove('hidden');$('logout').classList.add('hidden');
