@@ -1,0 +1,8 @@
+# DATA nikdy na GitHub – jen do Firebase (za přihlášením)
+rds_data.json
+firebase.local.json
+feed.local.txt
+backups/
+__pycache__/
+*.pyc
+.DS_Store
