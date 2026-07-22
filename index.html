@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RDS / DSPS — předávání dokumentace · M - SILNICE a.s.</title>
+<style>
+  :root{
+    --bg:#f4f6f9;--card:#ffffff;--line:#e4e8ef;--txt:#1b2430;--muted:#667488;
+    --accent:#1e3a5f;--accent2:#2563eb;--head:#f2f5fa;--title:#f8fafc;--edit:#f7f9fc;
+    --rucni:#fbfcfe;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt);-webkit-text-size-adjust:100%}
+  header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line);padding:9px 14px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;box-shadow:0 1px 2px rgba(15,23,42,.05)}
+  .brand{font-weight:800;font-size:15px;color:var(--accent);letter-spacing:.2px;white-space:nowrap}
+  .brand small{font-weight:600;color:var(--muted);font-size:11px;display:block;letter-spacing:.3px}
+  .grow{flex:1}
+  .btn{background:#fff;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer}
+  .btn:hover{border-color:var(--accent2)}
+  .btn-add{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .btn-add:hover{background:#16304f}
+  .ctrl{background:var(--edit);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 11px;font-size:13.5px}
+  .ctrl:focus{outline:none;border-color:var(--accent2)}
+  input,select,textarea{font-family:inherit}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:14px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .chip{background:#fff;border:1px solid var(--line);border-radius:999px;padding:7px 14px;font-size:13px;cursor:pointer;color:var(--muted);font-weight:600}
+  .chip:hover{border-color:var(--accent2)}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .chip .tag{font-size:10px;opacity:.85;margin-left:5px;font-weight:700}
+
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .toolbar .grow{min-width:120px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{background:#fff;color:var(--muted);border:0;padding:8px 12px;font-size:12.5px;cursor:pointer;border-right:1px solid var(--line)}
+  .seg button:last-child{border-right:0}
+  .seg button.on{background:var(--accent2);color:#fff;font-weight:700}
+
+  /* Přehledové statistiky */
+  .stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .stat{flex:1;min-width:120px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 13px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+  .stat .n{font-size:22px;font-weight:800;line-height:1.1}
+  .stat .l{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .stat.warn .n{color:#c2410c}
+  .stat.ok .n{color:#15803d}
+
+  .stavba{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:16px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,.05)}
+  .stavba .sh{padding:11px 14px;border-bottom:1px solid var(--line);background:var(--title);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .stavba .sh b{font-size:15px}
+  .stavba .sh .typ{font-size:10.5px;font-weight:800;letter-spacing:.5px;padding:2px 8px;border-radius:999px;background:var(--accent);color:#fff}
+
+  .grp{font-size:12px;font-weight:800;color:var(--muted);padding:9px 14px 3px;letter-spacing:.3px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead th{font-size:11px;color:var(--muted);background:var(--head);text-align:left;font-weight:700;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+  tbody td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+  tbody tr:hover td{background:#fbfdff}
+  .so-c{font-weight:700;white-space:nowrap}
+  .cast-c{color:var(--muted);font-size:12px}
+  .proj-c{font-size:11.5px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  tr.zmenarow td:first-child{box-shadow:inset 3px 0 0 #d97706}
+  tr.grp-top td{border-top:2.5px solid #b8c2d0}         /* silná čára mezi různými SO */
+  tr.is-part td:first-child{color:transparent}          /* u částí neopakuj číslo SO */
+  tr.is-part .cast-c{padding-left:12px;border-left:2px solid #e4e8ef;display:inline-block}
+  .miss{display:inline-block;font-size:10.5px;font-weight:800;background:#fee2e2;color:#b91c1c;border-radius:5px;padding:1px 6px;margin-left:4px}
+  .notecnt{display:inline-block;font-size:10.5px;color:var(--muted);margin-left:4px}
+
+  .badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap}
+  .b-wait{background:#eef1f5;color:#566273}   /* čeká na předkoncept */
+  .b-us{background:#dbeafe;color:#1d4ed8}      /* u nás */
+  .b-proj{background:#ede9fe;color:#6d28d9}    /* u projektanta */
+  .b-vv{background:#ccfbf1;color:#0f766e}      /* na VV */
+  .b-tds{background:#ffedd5;color:#c2410c}     /* u TDS */
+  .b-sign{background:#e0e7ff;color:#3730a3}    /* k podpisu / tisku */
+  .b-print{background:#e9d5ff;color:#7e22ce}   /* v tisku */
+  .b-done{background:#dcfce7;color:#15803d}    /* hotovo */
+  .b-late{background:#fee2e2;color:#b91c1c}    /* po termínu / bez pohybu */
+
+  .dur{font-weight:700;white-space:nowrap;font-size:12.5px}
+  .dur small{font-weight:500;color:var(--muted)}
+  .dur.red{color:#b91c1c}.dur.amber{color:#c2410c}.dur.gray{color:var(--muted)}
+  .zn{display:inline-block;font-size:10.5px;font-weight:800;background:#fef3c7;color:#92400e;border-radius:5px;padding:1px 6px}
+
+  .rowbtn{background:transparent;border:1px solid var(--line);border-radius:7px;color:var(--txt);cursor:pointer;font-size:12px;padding:3px 9px}
+  .rowbtn:hover{border-color:var(--accent2);color:var(--accent2)}
+
+  /* modal */
+  #modal,#smodal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:flex-start;justify-content:center;padding:20px;z-index:30;overflow:auto}
+  .hidden{display:none!important}
+  .mbox{background:var(--card);border:1px solid var(--line);border-radius:14px;width:100%;max-width:640px;padding:20px;margin:auto}
+  .mbox h3{margin:0 0 4px}
+  .mbox .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .frow{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .f{flex:1;min-width:150px}
+  .f label{display:block;font-size:11.5px;color:var(--muted);font-weight:700;margin-bottom:3px}
+  .f input,.f select,.f textarea{width:100%;background:var(--edit);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13.5px}
+  .f textarea{min-height:44px;resize:vertical}
+  .steps{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:6px 0 14px}
+  .step{display:flex;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line)}
+  .step:last-child{border-bottom:0}
+  .step.done{background:#f0fdf4}
+  .step .ord{width:22px;height:22px;flex:0 0 auto;border-radius:50%;background:#eef1f5;color:#566273;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center}
+  .step.done .ord{background:#16a34a;color:#fff}
+  .step .lab{flex:1;font-size:12.5px}
+  .step .lab small{display:block;color:var(--muted);font-size:11px}
+  .step input.d{width:135px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12.5px}
+  .step input.t{flex:1;min-width:90px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px}
+  .mbtns{display:flex;gap:8px;justify-content:flex-end;margin-top:6px;flex-wrap:wrap}
+  .mbtns .save{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .mbtns .del{color:#b91c1c;border-color:#f3c6c6}
+  .sechdr{font-size:11.5px;font-weight:800;color:var(--muted);letter-spacing:.4px;margin:14px 0 6px;text-transform:uppercase}
+  .hist{border-left:2px solid var(--line);margin:2px 0 8px;padding-left:12px}
+  .hist .h{font-size:12px;padding:3px 0;color:var(--txt)}
+  .hist .h b{color:var(--accent)}
+  .hist .h span{color:var(--muted)}
+  .hist .empty2{font-size:12px;color:var(--muted);padding:2px 0}
+  .notes .nn{background:var(--edit);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:12.5px;margin-bottom:5px}
+  .notes .nn .t{font-size:10.5px;color:var(--muted)}
+
+  /* gate */
+  #gate{position:fixed;inset:0;background:linear-gradient(160deg,#1e3a5f,#0f2036);display:flex;align-items:center;justify-content:center;padding:20px;z-index:40}
+  #gate .box{background:#fff;border-radius:16px;padding:26px;width:100%;max-width:350px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  #gate h2{margin:0 0 3px;color:var(--accent);font-size:19px}
+  #gate p{margin:0 0 18px;color:var(--muted);font-size:12.5px}
+  #gate input{width:100%;padding:11px 12px;margin-bottom:10px;border-radius:9px;border:1px solid var(--line);background:#fff;font-size:15px}
+  #gate .btn{width:100%;background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;padding:11px}
+  #g-err{color:#b91c1c;font-size:12px;min-height:16px}
+
+  .demo-bar{background:#7c3a02;color:#ffd9a8;font-size:12px;text-align:center;padding:6px}
+  .empty{color:var(--muted);font-size:13.5px;text-align:center;padding:30px;background:#fff;border:1px dashed var(--line);border-radius:12px}
+
+  /* inbox */
+  .inbox-item{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:#f5f9ff}
+  .inbox-item .src{font-size:11px;color:var(--muted);margin-bottom:5px}
+  .inbox-item .txt{font-size:13.5px;margin-bottom:8px}
+  .inbox-item b{color:var(--accent)}
+
+  @media(max-width:640px){
+    .proj-c{display:none}.hide-sm{display:none}
+    .wrap{padding:10px}
+  }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="box">
+    <h2>RDS / DSPS</h2>
+    <p>Předávání dokumentace · M - SILNICE a.s.</p>
+    <input id="g-mail" type="email" placeholder="e-mail" autocomplete="username">
+    <input id="g-pass" type="password" placeholder="heslo" autocomplete="current-password">
+    <button class="btn" id="g-login">Přihlásit</button>
+    <div id="g-err"></div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <div id="demo" class="demo-bar hidden">UKÁZKOVÝ REŽIM — data z <code>rds_data.json</code> (Martinovice + 4 stavby z feedu). Po zapojení Firebase se přepne na živá data.</div>
+  <header>
+    <div class="brand">RDS / DSPS<small>předávání dokumentace</small></div>
+    <div class="seg" id="viewseg">
+      <button data-v="prehled" class="on">Přehled</button>
+      <button data-v="inbox">Schránka <span id="inbox-n"></span></button>
+    </div>
+    <div class="grow"></div>
+    <input id="search" class="ctrl grow" placeholder="Hledat SO, popis, projektant…">
+    <button class="btn" id="btn-export">⬇︎ CSV</button>
+    <button class="btn-add btn" id="btn-add">+ SO</button>
+    <button class="btn hide-sm" id="btn-addstavba">+ Akce</button>
+    <button class="btn" id="logout">Odhlásit</button>
+  </header>
+
+  <div class="wrap">
+    <div class="chips" id="chips"></div>
+
+    <div id="v-prehled">
+      <div class="toolbar">
+        <div class="seg" id="fstage">
+          <button data-s="" class="on">Vše</button>
+          <button data-s="active">Rozpracované</button>
+          <button data-s="late">Zpožděné</button>
+          <button data-s="zmena">Změny</button>
+          <button data-s="done">Hotové</button>
+        </div>
+        <select id="fsort" class="ctrl">
+          <option value="so">Řadit: dle SO</option>
+          <option value="dur">Řadit: nejdéle bez pohybu</option>
+          <option value="delay">Řadit: největší zpoždění</option>
+          <option value="stage">Řadit: dle fáze</option>
+        </select>
+        <div class="grow"></div>
+      </div>
+      <div class="stats" id="stats"></div>
+      <div id="list"></div>
+    </div>
+
+    <div id="v-inbox" class="hidden">
+      <div class="empty" id="inbox-empty">Schránka je prázdná. Návrhy z mailů se sem doplní automaticky (denní úloha).</div>
+      <div id="inbox-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Detail / edit modal -->
+<div id="modal" class="hidden"><div class="mbox" id="mbox"></div></div>
+<!-- Stavba modal -->
+<div id="smodal" class="hidden"><div class="mbox" id="smbox"></div></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+/* ====== KONFIGURACE ====== */
+var FIREBASE_CONFIG={apiKey:"AIzaSyDqIsRdJoPHzbxN6SCRuCLt6KH42guaZXQ",authDomain:"rds-dsps.firebaseapp.com",databaseURL:"https://rds-dsps-default-rtdb.europe-west1.firebasedatabase.app",projectId:"rds-dsps",storageBucket:"rds-dsps.firebasestorage.app",messagingSenderId:"368098892816",appId:"1:368098892816:web:e617b08d58372fb6587e95"};
+function isPlaceholder(){return !FIREBASE_CONFIG.apiKey||FIREBASE_CONFIG.apiKey.indexOf('PLACEHOLDER')!==-1;}
+var DEMO_MODE=isPlaceholder()||/[?&]demo/.test(location.search)||location.hostname==='localhost'||location.hostname==='127.0.0.1';
+
+/* ====== DEFINICE MILNÍKŮ (tok RDS) ======
+   who = kdo dokumentaci drží po dokončení daného milníku (určuje „kde se nachází").  */
+var CHAIN={
+  RDS:[
+    {id:'m1', label:'předkoncept od projektanta', who:'us'},
+    {id:'m2', label:'připomínky od M-SILNICE',    who:'proj'},
+    {id:'m3', label:'předkoncept k VV',           who:'vv'},
+    {id:'m4', label:'koncept po VV (na TDS)',     who:'tds'},
+    {id:'m5', label:'připomínky TDS ke konceptu', who:'proj'},
+    {id:'m6', label:'čistopis od projektanta',    who:'tds'},
+    {id:'m7', label:'odsouhlasení čistopisu TDS', who:'sign'},
+    {id:'m8', label:'podepsáno na ASPE HUB',      who:'sign'},
+    {id:'m9', label:'pokyn k tisku',              who:'print'},
+    {id:'m10',label:'výtisky předány',            who:'done'}
+  ],
+  DSPS:[
+    {id:'m1', label:'žádost o zpracování DSPS',   who:'proj'},
+    {id:'m2', label:'předání předkonceptu',       who:'us'},
+    {id:'m3', label:'koncept od projektanta',     who:'us'},
+    {id:'m4', label:'odeslání připomínek na TDS', who:'tds'},
+    {id:'m5', label:'připomínky TDS ke konceptu', who:'proj'},
+    {id:'m6', label:'čistopis od projektanta',    who:'sign'},
+    {id:'m7', label:'čistopis uložen na ASPE HUB',who:'sign'},
+    {id:'m8', label:'pokyn k tisku',              who:'print'},
+    {id:'m9', label:'výtisky předány',            who:'done'}
+  ]
+};
+var WHO={
+  wait :{t:'Čeká na předkoncept',cls:'b-wait',kde:'u projektanta'},
+  us   :{t:'U nás (M-SILNICE)',   cls:'b-us',  kde:'M-SILNICE'},
+  proj :{t:'U projektanta',       cls:'b-proj',kde:'projektant'},
+  vv   :{t:'Na VV',               cls:'b-vv',  kde:'výrobní výbor'},
+  tds  :{t:'U TDS',               cls:'b-tds', kde:'TDS'},
+  sign :{t:'K podpisu / čistopis', cls:'b-sign',kde:'M-SILNICE / ŘSD'},
+  print:{t:'V tisku',             cls:'b-print',kde:'tisk'},
+  done :{t:'Hotovo',              cls:'b-done',kde:'předáno'}
+};
+
+/* ====== STAV ====== */
+var DATA={stavby:{},objekty:{},inbox:{}};
+var auth,db, curStavba=null, curView='prehled', curFStage='', curSort='so', curSearch='';
+function $(id){return document.getElementById(id);}
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function today(){var d=new Date();return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
+function parseD(s){if(!s)return null;var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s);if(!m)return null;return new Date(+m[1],+m[2]-1,+m[3]);}
+function daysBetween(a,b){return Math.round((a-b)/86400000);}
+function fmtCZ(iso){var d=parseD(iso);if(!d)return iso||'';return d.getDate()+'.'+(d.getMonth()+1)+'.'+d.getFullYear();}
+
+/* Milník má hodnotu, pokud má datum d nebo text t (např. „předloženo", „ano"). */
+function milDone(v){return !!(v&&(v.d||v.t));}
+
+/* Vrátí aktuální fázi objektu: {who, idx, since (dní), lastDate, lastLabel}. */
+function stageOf(o,typ){
+  var chain=CHAIN[typ||'RDS']||CHAIN.RDS;
+  var last=-1,lastDateIso=null,lastLabel=null;
+  var ms=o.milniky||{};
+  for(var i=0;i<chain.length;i++){
+    var v=ms[chain[i].id];
+    if(milDone(v)){last=i;lastLabel=chain[i].label;if(v.d)lastDateIso=v.d;}
+  }
+  if(last<0) return {who:'wait',idx:-1,lastDateIso:null,lastLabel:null,chain:chain};
+  return {who:chain[last].who,idx:last,lastDateIso:lastDateIso,lastLabel:lastLabel,chain:chain};
+}
+
+/* „Jak dlouho" + zpoždění vůči SOD. Vrací {durTxt,durCls,delayTxt}. */
+function timeInfo(o,st){
+  var t=today();
+  var out={durTxt:'',durCls:'gray',delayTxt:''};
+  if(st.who==='done'){
+    out.durTxt='hotovo';out.durCls='';return out;
+  }
+  if(st.idx>=0 && st.lastDateIso){
+    var d=parseD(st.lastDateIso);
+    var days=daysBetween(t,d);
+    out.durTxt=days+' '+sklonDni(days)+' v této fázi';
+    out.durCls = days>60?'red':(days>30?'amber':'gray');
+  }else{
+    /* ještě u projektanta – měřím vůči termínu SOD */
+    var sod=parseD(o.sod);
+    if(sod){
+      var dd=daysBetween(t,sod);
+      if(dd>0){out.durTxt=dd+' '+sklonDni(dd)+' po termínu';out.durCls='red';}
+      else if(dd===0){out.durTxt='termín dnes';out.durCls='amber';}
+      else{out.durTxt='za '+(-dd)+' '+sklonDni(-dd);out.durCls='gray';}
+    }else{out.durTxt='—';}
+  }
+  return out;
+}
+function sklonDni(n){n=Math.abs(n);if(n===1)return'den';if(n>=2&&n<=4)return'dny';return'dní';}
+
+/* zpoždění (kladné číslo dní po SOD, jinak null) – pro filtr/řazení */
+function delayDays(o,st){
+  if(st.idx>=0) return 0; /* už se pohnulo */
+  var sod=parseD(o.sod);if(!sod)return null;
+  var dd=daysBetween(today(),sod);return dd>0?dd:0;
+}
+function durDays(o,st){
+  if(st.who==='done')return -1;
+  if(st.idx>=0&&st.lastDateIso)return daysBetween(today(),parseD(st.lastDateIso));
+  var sod=parseD(o.sod);if(sod){var dd=daysBetween(today(),sod);return dd>0?dd:0;}
+  return 0;
+}
+
+/* ====== NAČTENÍ ====== */
+function startApp(){
+  db.ref('/').on('value',function(snap){
+    var v=snap.val()||{};
+    DATA.stavby=v.stavby||{};
+    DATA.objekty=v.objekty||{};
+    DATA.inbox=v.inbox||{};
+    afterData();
+  });
+}
+function afterData(){
+  if(!curStavba){var ids=Object.keys(DATA.stavby);if(ids.length)curStavba=ids[0];}
+  renderChips();render();
+}
+
+/* ====== VYKRESLENÍ ====== */
+function renderChips(){
+  var ids=Object.keys(DATA.stavby).sort(function(a,b){return (DATA.stavby[a].poradi||0)-(DATA.stavby[b].poradi||0)||(DATA.stavby[a].nazev||'').localeCompare(DATA.stavby[b].nazev||'');});
+  var h='';
+  ids.forEach(function(id){
+    var s=DATA.stavby[id];
+    var n=Object.keys(DATA.objekty[id]||{}).length;
+    h+='<button class="chip '+(id===curStavba?'on':'')+'" data-id="'+id+'">'+esc(s.nazev)+
+       '<span class="tag">'+esc(s.typ||'RDS')+' · '+n+'</span></button>';
+  });
+  $('chips').innerHTML=h||'<span class="empty" style="display:inline-block">Zatím žádná akce. Přidej ji tlačítkem „+ Akce".</span>';
+  [].forEach.call($('chips').querySelectorAll('.chip'),function(b){
+    b.onclick=function(){curStavba=b.dataset.id;renderChips();render();};
+  });
+}
+
+function objList(){
+  var m=DATA.objekty[curStavba]||{};
+  return Object.keys(m).map(function(k){var o=m[k];o._id=k;return o;});
+}
+
+function render(){
+  $('v-prehled').classList.toggle('hidden',curView!=='inbox'?false:true);
+  $('v-prehled').classList.toggle('hidden',curView==='inbox');
+  $('v-inbox').classList.toggle('hidden',curView!=='inbox');
+  if(curView==='inbox'){renderInbox();return;}
+  if(!curStavba){$('list').innerHTML='';$('stats').innerHTML='';return;}
+  var s=DATA.stavby[curStavba]; var typ=s.typ||'RDS';
+  var objs=objList();
+
+  /* výpočet fáze pro každý */
+  objs.forEach(function(o){o._st=stageOf(o,typ);o._ti=timeInfo(o,o._st);});
+
+  /* statistiky */
+  var real=objs.filter(function(o){return o.cast||!/SO 000/.test(o.so);}); /* přeskoč prázdné hlavičky bez částí */
+  var total=objs.length;
+  var done=objs.filter(function(o){return o._st.who==='done';}).length;
+  var late=objs.filter(function(o){return (delayDays(o,o._st)||0)>0;}).length;
+  var moving=objs.filter(function(o){return o._st.idx>=0&&o._st.who!=='done';}).length;
+  $('stats').innerHTML=
+    stat(total,'objektů / částí')+
+    stat(moving,'rozpracováno')+
+    stat(late,'po termínu','warn')+
+    stat(done,'hotovo','ok');
+
+  /* filtr */
+  var q=curSearch.toLowerCase();
+  var fl=objs.filter(function(o){
+    if(q){var hay=(o.so+' '+(o.popis||'')+' '+(o.cast||'')+' '+(o.projektant||'')+' '+(o.sub||'')).toLowerCase();if(hay.indexOf(q)<0)return false;}
+    if(curFStage==='active'&&(o._st.idx<0||o._st.who==='done'))return false;
+    if(curFStage==='late'&&!((delayDays(o,o._st)||0)>0))return false;
+    if(curFStage==='done'&&o._st.who!=='done')return false;
+    if(curFStage==='zmena'&&!(o.zmena||o.pozn_zmeny))return false;
+    return true;
+  });
+
+  /* řazení */
+  fl.sort(function(a,b){
+    if(curSort==='dur')return durDays(b,b._st)-durDays(a,a._st);
+    if(curSort==='delay')return (delayDays(b,b._st)||0)-(delayDays(a,a._st)||0);
+    if(curSort==='stage')return (b._st.idx)-(a._st.idx);
+    return String(a.so).localeCompare(String(b.so),'cs',{numeric:true})||String(a.cast||'').localeCompare(String(b.cast||''));
+  });
+
+  var rows='';
+  var lastSO=null;
+  fl.forEach(function(o){
+    var w=WHO[o._st.who];
+    var znTxt=o.zmena?('<span class="zn">zm. '+esc(o.zmena)+'</span>'):'';
+    var missTxt=(o.chybi&&String(o.chybi).trim())?('<span class="miss" title="'+esc(o.chybi)+'">chybí</span>'):'';
+    var nCnt=(o.poznamky&&o.poznamky.length)?('<span class="notecnt" title="poznámky">🗒️'+o.poznamky.length+'</span>'):'';
+    var isPart=!!o.cast;
+    var newGroup=(o.so!==lastSO);
+    var castTxt=o.cast?('<span class="cast-c">'+esc(o.cast)+'</span>'):(o.popis?'<span class="cast-c">'+esc(o.popis)+'</span>':'');
+    rows+='<tr class="'+(o.zmena?'zmenarow ':'')+(newGroup&&curSort==='so'?'grp-top ':'')+(isPart?'is-part':'')+'">'+
+      '<td class="so-c">'+esc(o.so)+'</td>'+
+      '<td>'+castTxt+' '+znTxt+' '+missTxt+' '+nCnt+'</td>'+
+      '<td class="proj-c" title="'+esc(o.projektant)+'">'+esc((o.projektant||'').split('\n')[0])+'</td>'+
+      '<td><span class="badge '+w.cls+'">'+w.t+'</span></td>'+
+      '<td class="dur '+o._ti.durCls+'">'+esc(o._ti.durTxt)+
+        (o._st.lastLabel?'<br><small>'+esc(o._st.lastLabel)+(o._st.lastDateIso?' · '+fmtCZ(o._st.lastDateIso):'')+'</small>':'')+'</td>'+
+      '<td style="text-align:right"><button class="rowbtn" data-edit="'+o._id+'">Detail</button></td>'+
+    '</tr>';
+    lastSO=o.so;
+  });
+
+  $('list').innerHTML=
+    '<div class="stavba">'+
+      '<div class="sh"><b>'+esc(s.nazev)+'</b><span class="typ">'+esc(typ)+'</span>'+
+        '<span style="color:var(--muted);font-size:12px">'+fl.length+' z '+total+' zobrazeno</span>'+
+        (s.meta?('<div style="flex-basis:100%;font-size:11.5px;color:var(--muted);margin-top:2px">'+
+          '📋 '+[s.meta.cislo?('č. '+esc(s.meta.cislo)):'',s.meta.pripravar?('přípravář '+esc(s.meta.pripravar)):'',
+                 s.meta.sv?('SV '+esc(s.meta.sv)):'',(s.meta.start||s.meta.finish)?('termín '+fmtCZ(s.meta.start)+'–'+fmtCZ(s.meta.finish)):'']
+          .filter(Boolean).join(' · ')+(s.meta.zdroj==='feed'?'  <span style="color:#0f766e">↳ z feedu</span>':'')+'</div>'):'')+
+      '</div>'+
+      (fl.length?('<table><thead><tr><th>SO</th><th>Popis / část</th><th class="proj-c">Projektant</th><th>Kde se nachází</th><th>Jak dlouho</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'):
+        '<div class="empty">Nic neodpovídá filtru.</div>')+
+    '</div>';
+  [].forEach.call($('list').querySelectorAll('[data-edit]'),function(b){b.onclick=function(){openEdit(b.dataset.edit);};});
+}
+function stat(n,l,cls){return '<div class="stat '+(cls||'')+'"><div class="n">'+n+'</div><div class="l">'+l+'</div></div>';}
+
+/* ====== DETAIL / EDIT ====== */
+function openEdit(id){
+  var s=DATA.stavby[curStavba];var typ=s.typ||'RDS';
+  var o=(DATA.objekty[curStavba]||{})[id]||{milniky:{}};
+  var chain=CHAIN[typ];
+  var ms=o.milniky||{};
+  var steps=chain.map(function(c,i){
+    var v=ms[c.id]||{};
+    return '<div class="step '+(milDone(v)?'done':'')+'">'+
+      '<div class="ord">'+(i+1)+'</div>'+
+      '<div class="lab">'+esc(c.label)+'<small>→ '+WHO[c.who].kde+'</small></div>'+
+      '<input class="d" type="date" data-m="'+c.id+'" value="'+(v.d||'')+'">'+
+      '<input class="t" placeholder="pozn. (kdo/kým, mail…)" data-mt="'+c.id+'" value="'+esc(v.t||'')+'">'+
+    '</div>';
+  }).join('');
+  /* poznámky (s časovým razítkem) */
+  var pozn=(o.poznamky||[]).slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+  var poznHtml=pozn.length?('<div class="notes">'+pozn.map(function(p){
+      return '<div class="nn"><div class="t">'+(p.ts?new Date(p.ts).toLocaleDateString('cs'):'')+(p.kdo?(' · '+esc(p.kdo)):'')+'</div>'+esc(p.t)+'</div>';
+    }).join('')+'</div>'):'';
+  /* historie = milníky s datem chronologicky + poznámky */
+  var events=[];
+  chain.forEach(function(c){var v=ms[c.id];if(v&&v.d)events.push({d:v.d,lab:c.label,t:v.t});});
+  if(o.vv_termin&&parseD(o.vv_termin))events.push({d:o.vv_termin,lab:'termín VV'+(o.vv_cislo?(' č.'+o.vv_cislo):''),t:''});
+  events.sort(function(a,b){return String(a.d).localeCompare(String(b.d));});
+  var histHtml=events.length?('<div class="hist">'+events.map(function(e){
+      return '<div class="h"><b>'+fmtCZ(e.d)+'</b> — '+esc(e.lab)+(e.t?' <span>· '+esc(e.t)+'</span>':'')+'</div>';
+    }).join('')+'</div>'):'<div class="hist"><div class="empty2">Zatím žádný vyplněný milník.</div></div>';
+  $('mbox').innerHTML=
+    '<h3>'+esc(o.so||'Nový objekt')+(o.cast?(' — '+esc(o.cast)):'')+'</h3>'+
+    '<div class="sub">'+esc(s.nazev)+' · '+typ+'</div>'+
+    '<div class="frow">'+
+      '<div class="f"><label>SO</label><input id="e-so" value="'+esc(o.so||'')+'"></div>'+
+      '<div class="f"><label>Popis / část</label><input id="e-cast" value="'+esc(o.cast||o.popis||'')+'"></div>'+
+    '</div>'+
+    '<div class="frow">'+
+      '<div class="f"><label>Termín předkonceptu (SOD)</label><input id="e-sod" type="date" value="'+(parseD(o.sod)?o.sod:'')+'"></div>'+
+      '<div class="f"><label>Změna (A, B, …)</label><input id="e-zmena" value="'+esc(o.zmena||'')+'"></div>'+
+    '</div>'+
+    '<div class="frow">'+
+      '<div class="f"><label>Projektant (jméno, tel, mail)</label><textarea id="e-proj">'+esc(o.projektant||'')+'</textarea></div>'+
+      '<div class="f"><label>SUB / poznámka</label><textarea id="e-sub">'+esc(o.sub||'')+'</textarea></div>'+
+    '</div>'+
+    '<div class="sechdr">Milníky předávání — vyplň datum (a kdo/kým)</div>'+
+    '<div class="steps">'+steps+'</div>'+
+    '<div class="f" style="margin-bottom:10px"><label>Chybí k RDS (RSP, přílohy…) — projektant nedodal</label>'+
+      '<input id="e-chybi" placeholder="např. Rozdílový soupis prací, PR řezy" value="'+esc(o.chybi||'')+'"></div>'+
+    '<div class="sechdr">Poznámky</div>'+poznHtml+
+    '<div class="f" style="margin-bottom:12px"><textarea id="e-newnote" placeholder="Přidat poznámku (uloží se s datem)…"></textarea></div>'+
+    '<div class="sechdr">Historie (kde co bylo a kdy)</div>'+histHtml+
+    '<div class="frow">'+
+      '<div class="f"><label>Číslo VV</label><input id="e-vvc" value="'+esc(o.vv_cislo||'')+'"></div>'+
+      '<div class="f"><label>Termín VV</label><input id="e-vvt" type="date" value="'+(parseD(o.vv_termin)?o.vv_termin:'')+'"></div>'+
+      '<div class="f"><label>Změna &gt;15 %</label><input id="e-z15" value="'+esc(o.zmena15||'')+'"></div>'+
+    '</div>'+
+    '<div class="f" style="margin-bottom:10px"><label>Poznámka o změnách</label><textarea id="e-poznz">'+esc(o.pozn_zmeny||'')+'</textarea></div>'+
+    '<div class="mbtns">'+
+      (o._new?'':'<button class="btn del" id="e-del">Smazat</button>')+
+      '<button class="btn" id="e-cancel">Zrušit</button>'+
+      '<button class="btn save" id="e-save">Uložit</button>'+
+    '</div>';
+  $('modal').classList.remove('hidden');
+  $('e-cancel').onclick=closeEdit;
+  if($('e-del'))$('e-del').onclick=function(){if(confirm('Smazat tento objekt?')){writeObj(id,null);closeEdit();}};
+  $('e-save').onclick=function(){
+    var nm={};
+    [].forEach.call($('mbox').querySelectorAll('[data-m]'),function(inp){
+      var mid=inp.dataset.m;var t=$('mbox').querySelector('[data-mt="'+mid+'"]');
+      var d=inp.value||null,tv=(t&&t.value)||null;
+      if(d||tv)nm[mid]={d:d,t:tv};
+    });
+    var poznamky=(o.poznamky||[]).slice();
+    var nn=$('e-newnote').value.trim();
+    if(nn)poznamky.push({ts:Date.now(),t:nn,kdo:'ručně'});
+    var obj={
+      so:$('e-so').value.trim(),
+      cast:$('e-cast').value.trim(),
+      popis:o.popis||'',
+      projektant:$('e-proj').value.trim(),
+      sub:$('e-sub').value.trim(),
+      sod:$('e-sod').value||null,
+      zmena:$('e-zmena').value.trim(),
+      zmena15:$('e-z15').value.trim(),
+      pozn_zmeny:$('e-poznz').value.trim(),
+      chybi:$('e-chybi').value.trim(),
+      poznamky:poznamky,
+      vv_cislo:$('e-vvc').value.trim(),
+      vv_termin:$('e-vvt').value||null,
+      milniky:nm,
+      poradi:o.poradi||Date.now()
+    };
+    writeObj(o._new?null:id,obj);
+    closeEdit();
+  };
+}
+function closeEdit(){$('modal').classList.add('hidden');}
+
+function writeObj(id,obj){
+  if(DEMO_MODE){
+    if(!DATA.objekty[curStavba])DATA.objekty[curStavba]={};
+    if(obj===null)delete DATA.objekty[curStavba][id];
+    else if(id)DATA.objekty[curStavba][id]=obj;
+    else DATA.objekty[curStavba]['n'+Date.now()]=obj;
+    renderChips();render();return;
+  }
+  var base=db.ref('objekty/'+curStavba);
+  if(obj===null)base.child(id).remove();
+  else if(id)base.child(id).set(obj);
+  else base.push(obj);
+}
+
+/* ====== STAVBA (akce) ====== */
+function openStavba(){
+  $('smbox').innerHTML=
+    '<h3>Nová akce (stavba)</h3><div class="sub">Založí prázdnou tabulku předávání.</div>'+
+    '<div class="f" style="margin-bottom:10px"><label>Název akce</label><input id="s-naz" placeholder="např. I/16 Mladá Boleslav – Martinovice"></div>'+
+    '<div class="f" style="margin-bottom:14px"><label>Typ dokumentace</label><select id="s-typ"><option>RDS</option><option>DSPS</option></select></div>'+
+    '<div class="mbtns"><button class="btn" id="s-cancel">Zrušit</button><button class="btn save" id="s-save">Založit</button></div>';
+  $('smodal').classList.remove('hidden');
+  $('s-cancel').onclick=function(){$('smodal').classList.add('hidden');};
+  $('s-save').onclick=function(){
+    var naz=$('s-naz').value.trim();if(!naz){alert('Zadej název.');return;}
+    var typ=$('s-typ').value;var id='a'+Date.now();
+    var rec={nazev:naz,typ:typ,poradi:Date.now()};
+    if(DEMO_MODE){DATA.stavby[id]=rec;DATA.objekty[id]={};}
+    else{db.ref('stavby/'+id).set(rec);}
+    curStavba=id;$('smodal').classList.add('hidden');renderChips();render();
+  };
+}
+
+/* ====== SCHRÁNKA (návrhy z mailů) ====== */
+function renderInbox(){
+  var items=Object.keys(DATA.inbox).map(function(k){var x=DATA.inbox[k];x._id=k;return x;})
+    .sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+  $('inbox-n').textContent=items.length?('· '+items.length):'';
+  $('inbox-empty').classList.toggle('hidden',items.length>0);
+  $('inbox-list').innerHTML=items.map(function(x){
+    return '<div class="inbox-item"><div class="src">'+esc(x.zdroj||'mail')+' · '+(x.ts?new Date(x.ts).toLocaleDateString('cs'):'')+'</div>'+
+      '<div class="txt"><b>'+esc(x.so||'')+'</b> '+esc(x.cast||'')+' — '+esc(x.popisNavrhu||'')+'</div>'+
+      '<div class="mbtns"><button class="btn del" data-drop="'+x._id+'">Zahodit</button>'+
+      '<button class="btn save" data-ok="'+x._id+'">Potvrdit do tabulky</button></div></div>';
+  }).join('');
+  [].forEach.call($('inbox-list').querySelectorAll('[data-drop]'),function(b){b.onclick=function(){dropInbox(b.dataset.drop);};});
+  [].forEach.call($('inbox-list').querySelectorAll('[data-ok]'),function(b){b.onclick=function(){confirmInbox(b.dataset.ok);};});
+}
+function dropInbox(id){if(DEMO_MODE){delete DATA.inbox[id];render();}else db.ref('inbox/'+id).remove();}
+function confirmInbox(id){
+  var x=DATA.inbox[id];if(!x)return;
+  alert('Návrh: '+(x.so||'')+' — '+(x.popisNavrhu||'')+'\n\n(Ve verzi s Firebase se zde návrh zapíše do příslušného SO. V ukázce jen odstraním ze schránky.)');
+  dropInbox(id);
+}
+
+/* ====== EXPORT CSV ====== */
+function exportCSV(){
+  var s=DATA.stavby[curStavba];if(!s)return;var typ=s.typ||'RDS';
+  var objs=objList();objs.forEach(function(o){o._st=stageOf(o,typ);o._ti=timeInfo(o,o._st);});
+  var head=['SO','Popis/část','Projektant','Kde se nachází','Poslední milník','Datum','Jak dlouho','Termín SOD','Změna'];
+  var lines=[head.join(';')];
+  objs.forEach(function(o){
+    lines.push([o.so,o.cast||o.popis||'',(o.projektant||'').split('\n')[0],WHO[o._st.who].t,o._st.lastLabel||'',fmtCZ(o._st.lastDateIso),o._ti.durTxt,fmtCZ(o.sod),o.zmena||'']
+      .map(function(c){return '"'+String(c==null?'':c).replace(/"/g,'""')+'"';}).join(';'));
+  });
+  var blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='RDS_'+(s.nazev||'export').replace(/[^\w]+/g,'_')+'.csv';a.click();
+}
+
+/* ====== UI vazby ====== */
+$('viewseg').onclick=function(e){var b=e.target.closest('button');if(!b)return;curView=b.dataset.v;[].forEach.call($('viewseg').children,function(x){x.classList.toggle('on',x===b);});render();};
+$('fstage').onclick=function(e){var b=e.target.closest('button');if(!b)return;curFStage=b.dataset.s;[].forEach.call($('fstage').children,function(x){x.classList.toggle('on',x===b);});render();};
+$('fsort').onchange=function(){curSort=this.value;render();};
+$('search').oninput=function(){curSearch=this.value;render();};
+$('btn-add').onclick=function(){if(!curStavba){alert('Nejdřív vyber nebo založ akci.');return;}openEdit4New();};
+function openEdit4New(){var tmp='_new';DATA.objekty[curStavba]=DATA.objekty[curStavba]||{};var o={so:'SO ',cast:'',milniky:{},_new:true};DATA.objekty[curStavba][tmp]=o;openEdit(tmp);delete DATA.objekty[curStavba][tmp];}
+$('btn-addstavba').onclick=openStavba;
+$('btn-export').onclick=exportCSV;
+$('logout').onclick=function(){if(DEMO_MODE){location.reload();return;}auth.signOut().then(function(){location.reload();});};
+
+/* ====== START ====== */
+function showApp(){$('gate').classList.add('hidden');$('app').classList.remove('hidden');}
+if(DEMO_MODE){
+  fetch('rds_data.json').then(function(r){return r.json();}).then(function(j){
+    var stavby={},objekty={};
+    Object.keys(j.stavby||{}).forEach(function(sid){
+      var s=j.stavby[sid];stavby[sid]={nazev:s.nazev,typ:s.typ||'RDS',poradi:s.poradi||1,meta:s.meta||null};
+      objekty[sid]={};(s.objekty||[]).forEach(function(o,i){objekty[sid]['o'+i]=o;});
+    });
+    DATA.stavby=stavby;DATA.objekty=objekty;DATA.inbox={};
+    $('demo').classList.remove('hidden');$('logout').classList.add('hidden');
+    showApp();afterData();
+  }).catch(function(){
+    DATA.stavby={};DATA.objekty={};showApp();afterData();
+  });
+}else{
+  firebase.initializeApp(FIREBASE_CONFIG);auth=firebase.auth();db=firebase.database();
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){});
+  auth.onAuthStateChanged(function(u){if(u){showApp();startApp();}});
+  $('g-login').onclick=function(){
+    var e=$('g-mail').value.trim(),p=$('g-pass').value;$('g-login').textContent='…';
+    auth.signInWithEmailAndPassword(e,p).then(function(){showApp();startApp();})
+      .catch(function(err){$('g-login').textContent='Přihlásit';$('g-err').textContent='Chyba: '+(err.code||'')+' '+(err.message||'');});
+  };
+  $('g-pass').addEventListener('keydown',function(ev){if(ev.key==='Enter')$('g-login').click();});
+}
+</script>
+</body>
+</html>
