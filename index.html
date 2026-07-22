@@ -19,17 +19,35 @@
   .btn{background:#fff;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer}
   .btn:hover{border-color:var(--accent2)}
   .btn-add{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .homebtn{text-decoration:none;color:var(--accent);font-weight:700;white-space:nowrap}
+  .homebtn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
   .btn-add:hover{background:#16304f}
   .ctrl{background:var(--edit);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 11px;font-size:13.5px}
   .ctrl:focus{outline:none;border-color:var(--accent2)}
   input,select,textarea{font-family:inherit}
 
   .wrap{max-width:1180px;margin:0 auto;padding:14px}
+  .chips-lbl{font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;margin-bottom:6px}
   .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
   .chip{background:#fff;border:1px solid var(--line);border-radius:999px;padding:7px 14px;font-size:13px;cursor:pointer;color:var(--muted);font-weight:600}
   .chip:hover{border-color:var(--accent2)}
-  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:800;box-shadow:0 2px 8px rgba(30,58,95,.25)}
+  .chip.on::before{content:"✓ ";font-weight:900}
   .chip .tag{font-size:10px;opacity:.85;margin-left:5px;font-weight:700}
+
+  /* Kontextový pruh: která stavba + přepínač RDS/DSPS */
+  .ctx{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:linear-gradient(180deg,#fff,#f8fafc);
+    border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:12px;padding:12px 16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(15,23,42,.05)}
+  .ctx .pin{font-size:18px}
+  .ctx .nm{font-size:18px;font-weight:800;color:var(--accent);line-height:1.15}
+  .ctx .nm small{display:block;font-size:11.5px;font-weight:600;color:var(--muted)}
+  .ctx .grow{flex:1;min-width:10px}
+  .typeg{display:inline-flex;border:2px solid var(--accent);border-radius:10px;overflow:hidden}
+  .typeg button{background:#fff;color:var(--accent);border:0;padding:9px 18px;font-size:14px;font-weight:800;cursor:pointer;border-right:2px solid var(--accent);display:flex;align-items:center;gap:6px}
+  .typeg button:last-child{border-right:0}
+  .typeg button.on{background:var(--accent);color:#fff}
+  .typeg button .c{font-size:11px;font-weight:700;background:rgba(0,0,0,.08);border-radius:999px;padding:1px 7px}
+  .typeg button.on .c{background:rgba(255,255,255,.25)}
 
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
   .toolbar .grow{min-width:120px}
@@ -158,6 +176,7 @@
 <div id="app" class="hidden">
   <div id="demo" class="demo-bar hidden">UKÁZKOVÝ REŽIM — data z <code>rds_data.json</code> (Martinovice + 4 stavby z feedu). Po zapojení Firebase se přepne na živá data.</div>
   <header>
+    <a class="btn homebtn" href="https://pripravar.github.io/OZ-JIH/" title="Zpět na rozcestník aplikací">‹ Aplikace</a>
     <div class="brand">RDS / DSPS<small>předávání dokumentace</small></div>
     <div class="seg" id="viewseg">
       <button data-v="prehled" class="on">Přehled</button>
@@ -172,9 +191,11 @@
   </header>
 
   <div class="wrap">
+    <div class="chips-lbl">Stavba</div>
     <div class="chips" id="chips"></div>
 
     <div id="v-prehled">
+      <div class="ctx" id="ctx"></div>
       <div class="toolbar">
         <div class="seg" id="fstage">
           <button data-s="" class="on">Vše</button>
@@ -256,7 +277,10 @@ var WHO={
 
 /* ====== STAV ====== */
 var DATA={stavby:{},objekty:{},inbox:{}};
-var auth,db, curStavba=null, curView='prehled', curFStage='', curSort='so', curSearch='';
+var auth,db, curStavba=null, curTyp='RDS', curView='prehled', curFStage='', curSort='so', curSearch='';
+function typObjMap(sid,typ){var s=DATA.objekty[sid]||{};return s[typ]||{};}
+function typCount(sid,typ){return Object.keys(typObjMap(sid,typ)).length;}
+function pickTyp(sid){if(typCount(sid,'RDS'))return 'RDS';if(typCount(sid,'DSPS'))return 'DSPS';return 'RDS';}
 function $(id){return document.getElementById(id);}
 function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function today(){var d=new Date();return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
@@ -330,8 +354,9 @@ function startApp(){
   });
 }
 function afterData(){
-  if(!curStavba){var ids=Object.keys(DATA.stavby);if(ids.length)curStavba=ids[0];}
-  renderChips();render();
+  if(!curStavba||!DATA.stavby[curStavba]){var ids=Object.keys(DATA.stavby);curStavba=ids.length?ids[0]:null;}
+  if(curStavba)curTyp=pickTyp(curStavba);
+  renderChips();renderCtx();render();
 }
 
 /* ====== VYKRESLENÍ ====== */
@@ -340,28 +365,46 @@ function renderChips(){
   var h='';
   ids.forEach(function(id){
     var s=DATA.stavby[id];
-    var n=Object.keys(DATA.objekty[id]||{}).length;
+    var r=typCount(id,'RDS'),d=typCount(id,'DSPS');
+    var tag=[r?('RDS '+r):'',d?('DSPS '+d):''].filter(Boolean).join(' · ')||'prázdné';
     h+='<button class="chip '+(id===curStavba?'on':'')+'" data-id="'+id+'">'+esc(s.nazev)+
-       '<span class="tag">'+esc(s.typ||'RDS')+' · '+n+'</span></button>';
+       '<span class="tag">'+tag+'</span></button>';
   });
   $('chips').innerHTML=h||'<span class="empty" style="display:inline-block">Zatím žádná akce. Přidej ji tlačítkem „+ Akce".</span>';
   [].forEach.call($('chips').querySelectorAll('.chip'),function(b){
-    b.onclick=function(){curStavba=b.dataset.id;renderChips();render();};
+    b.onclick=function(){curStavba=b.dataset.id;curTyp=pickTyp(curStavba);renderChips();renderCtx();render();};
+  });
+}
+
+/* Kontextový pruh: velký název stavby + přepínač RDS/DSPS */
+function renderCtx(){
+  if(!curStavba){$('ctx').innerHTML='';return;}
+  var s=DATA.stavby[curStavba];
+  var r=typCount(curStavba,'RDS'),d=typCount(curStavba,'DSPS');
+  $('ctx').innerHTML=
+    '<span class="pin">📍</span>'+
+    '<div class="nm">'+esc(s.nazev)+'<small>zobrazená stavba · vpravo přepínáš dokumentaci</small></div>'+
+    '<div class="grow"></div>'+
+    '<div class="typeg" id="typeg">'+
+      '<button data-typ="RDS" class="'+(curTyp==='RDS'?'on':'')+'">RDS <span class="c">'+r+'</span></button>'+
+      '<button data-typ="DSPS" class="'+(curTyp==='DSPS'?'on':'')+'">DSPS <span class="c">'+d+'</span></button>'+
+    '</div>';
+  [].forEach.call($('typeg').querySelectorAll('button'),function(b){
+    b.onclick=function(){curTyp=b.dataset.typ;renderCtx();render();};
   });
 }
 
 function objList(){
-  var m=DATA.objekty[curStavba]||{};
+  var m=typObjMap(curStavba,curTyp);
   return Object.keys(m).map(function(k){var o=m[k];o._id=k;return o;});
 }
 
 function render(){
-  $('v-prehled').classList.toggle('hidden',curView!=='inbox'?false:true);
   $('v-prehled').classList.toggle('hidden',curView==='inbox');
   $('v-inbox').classList.toggle('hidden',curView!=='inbox');
   if(curView==='inbox'){renderInbox();return;}
   if(!curStavba){$('list').innerHTML='';$('stats').innerHTML='';return;}
-  var s=DATA.stavby[curStavba]; var typ=s.typ||'RDS';
+  var s=DATA.stavby[curStavba]; var typ=curTyp;
   var objs=objList();
 
   /* výpočet fáze pro každý */
@@ -420,9 +463,12 @@ function render(){
     lastSO=o.so;
   });
 
+  var emptyTxt = total===0
+    ? 'Pro <b>'+esc(typ)+'</b> u této stavby zatím není žádné SO. Přidej ho tlačítkem <b>+ SO</b> (nebo se doplní z mailů).'
+    : 'Nic neodpovídá filtru.';
   $('list').innerHTML=
     '<div class="stavba">'+
-      '<div class="sh"><b>'+esc(s.nazev)+'</b><span class="typ">'+esc(typ)+'</span>'+
+      '<div class="sh"><span class="typ">'+esc(typ)+'</span><b>'+esc(s.nazev)+'</b>'+
         '<span style="color:var(--muted);font-size:12px">'+fl.length+' z '+total+' zobrazeno</span>'+
         (s.meta?('<div style="flex-basis:100%;font-size:11.5px;color:var(--muted);margin-top:2px">'+
           '📋 '+[s.meta.cislo?('č. '+esc(s.meta.cislo)):'',s.meta.pripravar?('přípravář '+esc(s.meta.pripravar)):'',
@@ -430,7 +476,7 @@ function render(){
           .filter(Boolean).join(' · ')+(s.meta.zdroj==='feed'?'  <span style="color:#0f766e">↳ z feedu</span>':'')+'</div>'):'')+
       '</div>'+
       (fl.length?('<table><thead><tr><th>SO</th><th>Popis / část</th><th class="proj-c">Projektant</th><th>Kde se nachází</th><th>Jak dlouho</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'):
-        '<div class="empty">Nic neodpovídá filtru.</div>')+
+        '<div class="empty">'+emptyTxt+'</div>')+
     '</div>';
   [].forEach.call($('list').querySelectorAll('[data-edit]'),function(b){b.onclick=function(){openEdit(b.dataset.edit);};});
 }
@@ -438,8 +484,8 @@ function stat(n,l,cls){return '<div class="stat '+(cls||'')+'"><div class="n">'+
 
 /* ====== DETAIL / EDIT ====== */
 function openEdit(id){
-  var s=DATA.stavby[curStavba];var typ=s.typ||'RDS';
-  var o=(DATA.objekty[curStavba]||{})[id]||{milniky:{}};
+  var s=DATA.stavby[curStavba];var typ=curTyp;
+  var o=typObjMap(curStavba,curTyp)[id]||{milniky:{}};
   var chain=CHAIN[typ];
   var ms=o.milniky||{};
   var steps=chain.map(function(c,i){
@@ -536,12 +582,14 @@ function closeEdit(){$('modal').classList.add('hidden');}
 function writeObj(id,obj){
   if(DEMO_MODE){
     if(!DATA.objekty[curStavba])DATA.objekty[curStavba]={};
-    if(obj===null)delete DATA.objekty[curStavba][id];
-    else if(id)DATA.objekty[curStavba][id]=obj;
-    else DATA.objekty[curStavba]['n'+Date.now()]=obj;
-    renderChips();render();return;
+    if(!DATA.objekty[curStavba][curTyp])DATA.objekty[curStavba][curTyp]={};
+    var m=DATA.objekty[curStavba][curTyp];
+    if(obj===null)delete m[id];
+    else if(id)m[id]=obj;
+    else m['n'+Date.now()]=obj;
+    renderChips();renderCtx();render();return;
   }
-  var base=db.ref('objekty/'+curStavba);
+  var base=db.ref('objekty/'+curStavba+'/'+curTyp);
   if(obj===null)base.child(id).remove();
   else if(id)base.child(id).set(obj);
   else base.push(obj);
@@ -550,19 +598,18 @@ function writeObj(id,obj){
 /* ====== STAVBA (akce) ====== */
 function openStavba(){
   $('smbox').innerHTML=
-    '<h3>Nová akce (stavba)</h3><div class="sub">Založí prázdnou tabulku předávání.</div>'+
-    '<div class="f" style="margin-bottom:10px"><label>Název akce</label><input id="s-naz" placeholder="např. I/16 Mladá Boleslav – Martinovice"></div>'+
-    '<div class="f" style="margin-bottom:14px"><label>Typ dokumentace</label><select id="s-typ"><option>RDS</option><option>DSPS</option></select></div>'+
+    '<h3>Nová akce (stavba)</h3><div class="sub">Založí prázdnou akci s tabulkou RDS i DSPS.</div>'+
+    '<div class="f" style="margin-bottom:14px"><label>Název akce</label><input id="s-naz" placeholder="např. I/16 Mladá Boleslav – Martinovice"></div>'+
     '<div class="mbtns"><button class="btn" id="s-cancel">Zrušit</button><button class="btn save" id="s-save">Založit</button></div>';
   $('smodal').classList.remove('hidden');
   $('s-cancel').onclick=function(){$('smodal').classList.add('hidden');};
   $('s-save').onclick=function(){
     var naz=$('s-naz').value.trim();if(!naz){alert('Zadej název.');return;}
-    var typ=$('s-typ').value;var id='a'+Date.now();
-    var rec={nazev:naz,typ:typ,poradi:Date.now()};
-    if(DEMO_MODE){DATA.stavby[id]=rec;DATA.objekty[id]={};}
+    var id='a'+Date.now();
+    var rec={nazev:naz,poradi:Date.now()};
+    if(DEMO_MODE){DATA.stavby[id]=rec;DATA.objekty[id]={RDS:{},DSPS:{}};}
     else{db.ref('stavby/'+id).set(rec);}
-    curStavba=id;$('smodal').classList.add('hidden');renderChips();render();
+    curStavba=id;curTyp='RDS';$('smodal').classList.add('hidden');renderChips();renderCtx();render();
   };
 }
 
@@ -590,7 +637,7 @@ function confirmInbox(id){
 
 /* ====== EXPORT CSV ====== */
 function exportCSV(){
-  var s=DATA.stavby[curStavba];if(!s)return;var typ=s.typ||'RDS';
+  var s=DATA.stavby[curStavba];if(!s)return;var typ=curTyp;
   var objs=objList();objs.forEach(function(o){o._st=stageOf(o,typ);o._ti=timeInfo(o,o._st);});
   var head=['SO','Popis/část','Projektant','Kde se nachází','Poslední milník','Datum','Jak dlouho','Termín SOD','Změna'];
   var lines=[head.join(';')];
@@ -600,7 +647,7 @@ function exportCSV(){
   });
   var blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
   var a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download='RDS_'+(s.nazev||'export').replace(/[^\w]+/g,'_')+'.csv';a.click();
+  a.download=typ+'_'+(s.nazev||'export').replace(/[^\w]+/g,'_')+'.csv';a.click();
 }
 
 /* ====== UI vazby ====== */
@@ -609,7 +656,7 @@ $('fstage').onclick=function(e){var b=e.target.closest('button');if(!b)return;cu
 $('fsort').onchange=function(){curSort=this.value;render();};
 $('search').oninput=function(){curSearch=this.value;render();};
 $('btn-add').onclick=function(){if(!curStavba){alert('Nejdřív vyber nebo založ akci.');return;}openEdit4New();};
-function openEdit4New(){var tmp='_new';DATA.objekty[curStavba]=DATA.objekty[curStavba]||{};var o={so:'SO ',cast:'',milniky:{},_new:true};DATA.objekty[curStavba][tmp]=o;openEdit(tmp);delete DATA.objekty[curStavba][tmp];}
+function openEdit4New(){var tmp='_new';DATA.objekty[curStavba]=DATA.objekty[curStavba]||{};DATA.objekty[curStavba][curTyp]=DATA.objekty[curStavba][curTyp]||{};var o={so:'SO ',cast:'',milniky:{},_new:true};DATA.objekty[curStavba][curTyp][tmp]=o;openEdit(tmp);delete DATA.objekty[curStavba][curTyp][tmp];}
 $('btn-addstavba').onclick=openStavba;
 $('btn-export').onclick=exportCSV;
 $('logout').onclick=function(){if(DEMO_MODE){location.reload();return;}auth.signOut().then(function(){location.reload();});};
@@ -620,8 +667,10 @@ if(DEMO_MODE){
   fetch('rds_data.json').then(function(r){return r.json();}).then(function(j){
     var stavby={},objekty={};
     Object.keys(j.stavby||{}).forEach(function(sid){
-      var s=j.stavby[sid];stavby[sid]={nazev:s.nazev,typ:s.typ||'RDS',poradi:s.poradi||1,meta:s.meta||null};
-      objekty[sid]={};(s.objekty||[]).forEach(function(o,i){objekty[sid]['o'+i]=o;});
+      var s=j.stavby[sid];stavby[sid]={nazev:s.nazev,poradi:s.poradi||1,meta:s.meta||null};
+      var typ=s.typ||'RDS';
+      objekty[sid]={RDS:{},DSPS:{}};
+      (s.objekty||[]).forEach(function(o,i){objekty[sid][typ]['o'+i]=o;});
     });
     DATA.stavby=stavby;DATA.objekty=objekty;DATA.inbox={};
     $('demo').classList.remove('hidden');$('logout').classList.add('hidden');

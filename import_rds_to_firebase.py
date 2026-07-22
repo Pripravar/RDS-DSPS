@@ -36,10 +36,13 @@ def main():
     token = signin(cfg)
     stavby, objekty = {}, {}
     for sid, s in data.get("stavby", {}).items():
-        stavby[sid] = {"nazev": s["nazev"], "typ": s.get("typ", "RDS"), "poradi": 1}
-        objekty[sid] = {}
+        typ = s.get("typ", "RDS")
+        stavby[sid] = {"nazev": s["nazev"], "poradi": s.get("poradi", 1)}
+        if s.get("meta"): stavby[sid]["meta"] = s["meta"]
+        # každá stavba má sekci RDS i DSPS; data vzoru jdou do své sekce
+        objekty[sid] = {"RDS": {}, "DSPS": {}}
         for i, o in enumerate(s.get("objekty", [])):
-            objekty[sid]["o%03d" % i] = o
+            objekty[sid][typ]["o%03d" % i] = o
     print("stavby:", put(cfg["dbUrl"], "stavby", token, stavby))
     print("objekty:", put(cfg["dbUrl"], "objekty", token, objekty))
     print("Hotovo. Zkontroluj appku.")

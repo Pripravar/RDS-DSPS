@@ -39,7 +39,8 @@ jméno + mail (příp. telefon) projektanta k danému SO, ulož do `objekty/<…
    `CHAIN` v `index.html`) a **datum** (z těla/přílohy; když chybí, datum mailu).
    - Směr toku napovídá milník: „projektant → M-SILNICE" = m1/m3, „M-SILNICE → projektant" = m2,
      „připomínky TDS" = m5, „čistopis" = m6, „pokyn k tisku" = m9, „výtisky předány" = m10 atd.
-4. **Zapiš** `objekty/<stavba>/<objekt>/milniky/<mID> = { d: "YYYY-MM-DD", t: "<kdo>→<komu> (mail)" }`.
+4. **Zapiš** `objekty/<stavba>/<RDS|DSPS>/<objekt>/milniky/<mID> = { d: "YYYY-MM-DD", t: "<kdo>→<komu> (mail)" }`
+   (každá stavba má zvlášť sekci RDS a DSPS — vyber podle typu dokumentace, které se mail týká).
    Nikdy nepřepisuj už vyplněný milník jinou hodnotou bez toho, že bys to poznamenal do `/log`.
 5. Přidej řádek do `/log`: `{ ts, stavba, objekt, milnik, d, zdroj:"<předmět mailu>" }`.
 6. Vlákno oštítkuj `RDS/Zpracovano`. Nejednoznačné (nevíš SO/milník) dej do `/inbox`
