@@ -299,14 +299,28 @@ var CHAIN={
     {id:'m7', label:'čistopis uložen na ASPE HUB',who:'sign'},
     {id:'m8', label:'pokyn k tisku',              who:'print'},
     {id:'m9', label:'výtisky předány',            who:'done'}
+  ],
+  /* VTD (výrobně-tech. dokumentace / odsouhlasení materiálů) — dle „Přehled VTD" D10 Kosmonosy.
+     Kolečko konceptů (odeslání/vrácení) se opakuje → další kola zapiš do Poznámek. */
+  VTD:[
+    {id:'m1', label:'koncept odeslán (zhotovitel → TDI)', who:'td'},
+    {id:'m2', label:'vrácení / připomínky (TDI)',         who:'zhot'},
+    {id:'m3', label:'odsouhlaseno TDI',                   who:'sign'},
+    {id:'m4', label:'čistopis zhotovitel → TDI',          who:'td'},
+    {id:'m5', label:'čistopis TDI → zhotovitel',          who:'done'}
   ]
 };
+/* typy dokumentace u každé stavby a jejich režim: 'chain' = milníky, 'sub' = log verzí odeslaných SUBovi */
+var TYPS=['RDS','DSPS','VTD','SUB'];
+var MODE={RDS:'chain',DSPS:'chain',VTD:'chain',SUB:'sub'};
 var WHO={
   wait :{t:'Čeká na předkoncept',cls:'b-wait',kde:'u projektanta'},
   us   :{t:'U nás (M-SILNICE)',   cls:'b-us',  kde:'M-SILNICE'},
   proj :{t:'U projektanta',       cls:'b-proj',kde:'projektant'},
+  zhot :{t:'U zhotovitele',       cls:'b-proj',kde:'zhotovitel'},
   vv   :{t:'Na VV',               cls:'b-vv',  kde:'výrobní výbor'},
   tds  :{t:'U TDS',               cls:'b-tds', kde:'TDS'},
+  td   :{t:'U TD',                cls:'b-tds', kde:'TD'},
   sign :{t:'K podpisu / čistopis', cls:'b-sign',kde:'M-SILNICE / ŘSD'},
   print:{t:'V tisku',             cls:'b-print',kde:'tisk'},
   done :{t:'Hotovo',              cls:'b-done',kde:'předáno'}
@@ -317,7 +331,10 @@ var DATA={stavby:{},objekty:{},inbox:{}};
 var auth,db, curStavba=null, curTyp='RDS', curView='prehled', curFStage='', curSort='so', curSearch='';
 function typObjMap(sid,typ){var s=DATA.objekty[sid]||{};return s[typ]||{};}
 function typCount(sid,typ){return Object.keys(typObjMap(sid,typ)).length;}
-function pickTyp(sid){if(typCount(sid,'RDS'))return 'RDS';if(typCount(sid,'DSPS'))return 'DSPS';return 'RDS';}
+function pickTyp(sid){for(var i=0;i<TYPS.length;i++){if(typCount(sid,TYPS[i]))return TYPS[i];}return 'RDS';}
+var WAIT={RDS:{t:'Čeká na předkoncept',cls:'b-wait',kde:'u projektanta'},
+          DSPS:{t:'Čeká na zpracování', cls:'b-wait',kde:'projektant'},
+          VTD:{t:'Čeká na VTD',         cls:'b-wait',kde:'zhotovitel'}};
 function $(id){return document.getElementById(id);}
 function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function today(){var d=new Date();return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
@@ -402,8 +419,7 @@ function renderChips(){
   var h='';
   ids.forEach(function(id){
     var s=DATA.stavby[id];
-    var r=typCount(id,'RDS'),d=typCount(id,'DSPS');
-    var tag=[r?('RDS '+r):'',d?('DSPS '+d):''].filter(Boolean).join(' · ')||'prázdné';
+    var tag=TYPS.map(function(tp){var n=typCount(id,tp);return n?(tp+' '+n):'';}).filter(Boolean).join(' · ')||'prázdné';
     h+='<button class="chip '+(id===curStavba?'on':'')+'" data-id="'+id+'">'+esc(s.nazev)+
        '<span class="tag">'+tag+'</span></button>';
   });
@@ -417,15 +433,14 @@ function renderChips(){
 function renderCtx(){
   if(!curStavba){$('ctx').innerHTML='';return;}
   var s=DATA.stavby[curStavba];
-  var r=typCount(curStavba,'RDS'),d=typCount(curStavba,'DSPS');
+  var btns=TYPS.map(function(tp){
+    return '<button data-typ="'+tp+'" class="'+(curTyp===tp?'on':'')+'">'+tp+' <span class="c">'+typCount(curStavba,tp)+'</span></button>';
+  }).join('');
   $('ctx').innerHTML=
     '<span class="pin">📍</span>'+
     '<div class="nm">'+esc(s.nazev)+'<small>zobrazená stavba · vpravo přepínáš dokumentaci</small></div>'+
     '<div class="grow"></div>'+
-    '<div class="typeg" id="typeg">'+
-      '<button data-typ="RDS" class="'+(curTyp==='RDS'?'on':'')+'">RDS <span class="c">'+r+'</span></button>'+
-      '<button data-typ="DSPS" class="'+(curTyp==='DSPS'?'on':'')+'">DSPS <span class="c">'+d+'</span></button>'+
-    '</div>';
+    '<div class="typeg" id="typeg">'+btns+'</div>';
   [].forEach.call($('typeg').querySelectorAll('button'),function(b){
     b.onclick=function(){curTyp=b.dataset.typ;renderCtx();render();};
   });
@@ -444,6 +459,7 @@ function render(){
   if(!curStavba){$('list').innerHTML='';$('stats').innerHTML='';return;}
   var s=DATA.stavby[curStavba]; var typ=curTyp;
   var objs=objList();
+  if((MODE[typ]||'chain')==='sub'){renderSub(s,typ,objs);return;}
 
   /* výpočet fáze pro každý */
   objs.forEach(function(o){o._st=stageOf(o,typ);o._ti=timeInfo(o,o._st);});
@@ -482,7 +498,7 @@ function render(){
   var rows='';
   var lastSO=null;
   fl.forEach(function(o){
-    var w=WHO[o._st.who];
+    var w=(o._st.who==='wait'&&WAIT[typ])?WAIT[typ]:WHO[o._st.who];
     var znTxt=o.zmena?('<span class="zn">zm. '+esc(o.zmena)+'</span>'):'';
     var missTxt=(o.chybi&&String(o.chybi).trim())?('<span class="miss" title="'+esc(o.chybi)+'">chybí</span>'):'';
     var nCnt=(o.poznamky&&o.poznamky.length)?('<span class="notecnt" title="poznámky">🗒️'+o.poznamky.length+'</span>'):'';
@@ -520,10 +536,62 @@ function render(){
 }
 function stat(n,l,cls){return '<div class="stat '+(cls||'')+'"><div class="n">'+n+'</div><div class="l">'+l+'</div></div>';}
 
+/* ====== SUB (log verzí odeslaných subdodavateli) ====== */
+function subNum(v){var n=parseInt(String(v==null?'':v).replace(/\D/g,''));return isNaN(n)?0:n;}
+function subLast(o){
+  var arr=(o.odeslani||[]).filter(function(x){return x&&(x.d||x.verze);});
+  if(!arr.length)return null;
+  return arr.slice().sort(function(a,b){return subNum(a.verze)-subNum(b.verze)||String(a.d||'').localeCompare(String(b.d||''));})[arr.length-1];
+}
+function renderSub(s,typ,objs){
+  var q=curSearch.toLowerCase();
+  var fl=objs.filter(function(o){
+    if(!q)return true;
+    var hay=(o.so+' '+(o.popis||'')+' '+(o.cast||'')+' '+(o.sub||'')).toLowerCase();return hay.indexOf(q)>=0;
+  });
+  fl.forEach(function(o){o._last=subLast(o);});
+  var total=objs.length;
+  var odeslano=objs.filter(function(o){return subLast(o);}).length;
+  $('stats').innerHTML=
+    stat(total,'SO / položek')+
+    stat(odeslano,'odesláno na SUB')+
+    stat(total-odeslano,'zatím neodesláno','warn')+
+    stat(new Set(objs.map(function(o){return (o.sub||'').trim();}).filter(Boolean)).size,'subdodavatelů');
+  if(curSort==='so')fl.sort(function(a,b){return String(a.so).localeCompare(String(b.so),'cs',{numeric:true})||((a._ord||0)-(b._ord||0));});
+  else fl.sort(function(a,b){return (b._last?parseD(b._last.d)||0:0)-(a._last?parseD(a._last.d)||0:0);});
+  var rows='',lastSO=null;
+  fl.forEach(function(o){
+    var L=o._last, newGroup=(o.so!==lastSO);
+    var kde = L?('<span class="badge b-us">v'+esc(subNum(L.verze)||L.verze||'?')+'</span>'):'<span class="badge b-wait">neodesláno</span>';
+    var kdy='—',cls='gray';
+    if(L&&L.d){var days=daysBetween(today(),parseD(L.d));kdy=fmtCZ(L.d)+' · před '+days+' '+sklonDni(days);cls=days>90?'amber':'';}
+    var castTxt=o.cast?('<span class="cast-c">'+esc(o.cast)+'</span>'):(o.popis?'<span class="cast-c">'+esc(o.popis)+'</span>':'');
+    var nOd=(o.odeslani&&o.odeslani.length)?('<span class="notecnt">📤'+o.odeslani.length+'×</span>'):'';
+    rows+='<tr class="'+(newGroup&&curSort==='so'?'grp-top ':'')+(o.cast?'is-part':'')+'">'+
+      '<td class="so-c">'+esc(o.so)+'</td>'+
+      '<td>'+castTxt+' '+nOd+'</td>'+
+      '<td class="proj-c" title="'+esc(o.sub)+'">'+esc((o.sub||'—').split('\n')[0])+'</td>'+
+      '<td>'+kde+(L&&L.pozn?' <small style="color:var(--muted)">'+esc(L.pozn)+'</small>':'')+'</td>'+
+      '<td class="dur '+cls+'">'+esc(kdy)+'</td>'+
+      '<td style="text-align:right"><button class="rowbtn" data-edit="'+o._id+'">Detail</button></td>'+
+    '</tr>';
+    lastSO=o.so;
+  });
+  $('list').innerHTML=
+    '<div class="stavba">'+
+      '<div class="sh"><span class="typ">SUB</span><b>'+esc(s.nazev)+'</b>'+
+        '<span style="color:var(--muted);font-size:12px">jaké SO / v jaké verzi jsem kdy poslal subdodavateli · '+fl.length+' z '+total+'</span></div>'+
+      (fl.length?('<table><thead><tr><th>SO</th><th>Popis / položka</th><th class="proj-c">Subdodavatel</th><th>Poslední verze</th><th>Kdy odesláno</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'):
+        '<div class="empty">Pro <b>SUB</b> zatím nic. Přidej SO tlačítkem <b>+ SO</b> a zaeviduj, co jsi poslal subdodavateli.</div>')+
+    '</div>';
+  [].forEach.call($('list').querySelectorAll('[data-edit]'),function(b){b.onclick=function(){openEdit(b.dataset.edit);};});
+}
+
 /* ====== DETAIL / EDIT ====== */
 function openEdit(id){
   var s=DATA.stavby[curStavba];var typ=curTyp;
   var o=typObjMap(curStavba,curTyp)[id]||{milniky:{}};
+  if((MODE[typ]||'chain')==='sub'){openEditSub(id,s,o,null);return;}
   var chain=CHAIN[typ];
   var ms=o.milniky||{};
   var steps=chain.map(function(c,i){
@@ -617,6 +685,50 @@ function openEdit(id){
 }
 function closeEdit(){$('modal').classList.add('hidden');}
 
+/* Detail SUB: subdodavatel + log odeslaných verzí (co jsem kdy poslal SUBovi) */
+function openEditSub(id,s,o,workOverride){
+  var work=(workOverride||o.odeslani||[]).slice().sort(function(a,b){return subNum(a.verze)-subNum(b.verze)||String(a.d||'').localeCompare(String(b.d||''));});
+  var list=work.length?('<div class="hist">'+work.map(function(x,i){
+      return '<div class="h"><b>v'+esc(x.verze||(i+1))+'</b> — '+(x.d?fmtCZ(x.d):'(bez data)')+(x.pozn?' <span>· '+esc(x.pozn)+'</span>':'')+
+        '<button class="por-x" data-del-send="'+i+'" style="float:right;border:1px solid var(--line);border-radius:6px">smazat</button></div>';
+    }).join('')+'</div>'):'<div class="hist"><div class="empty2">Zatím nic neodesláno na SUB.</div></div>';
+  var nextV=(work.length?subNum(work[work.length-1].verze):0)+1;
+  $('mbox').innerHTML=
+    '<h3>'+esc(o.so||'Nový záznam')+(o.cast?(' — '+esc(o.cast)):'')+'</h3>'+
+    '<div class="sub">'+esc(s.nazev)+' · SUB — co jsem poslal subdodavateli</div>'+
+    '<div class="frow">'+
+      '<div class="f"><label>SO</label><input id="e-so" value="'+esc(o.so||'')+'"></div>'+
+      '<div class="f"><label>Popis / položka</label><input id="e-cast" value="'+esc(o.cast||o.popis||'')+'"></div>'+
+    '</div>'+
+    '<div class="f" style="margin-bottom:12px"><label>Subdodavatel (jméno / firma)</label><input id="e-subname" value="'+esc(o.sub||'')+'"></div>'+
+    '<div class="sechdr">Odeslané verze na SUB</div>'+list+
+    '<div class="sechdr">Přidat odeslání</div>'+
+    '<div class="frow" style="align-items:flex-end">'+
+      '<div class="f" style="max-width:80px"><label>Verze</label><input id="e-sv" value="'+nextV+'"></div>'+
+      '<div class="f" style="max-width:160px"><label>Datum odeslání</label><input id="e-sd" type="date"></div>'+
+      '<div class="f"><label>Poznámka (co / čistopis…)</label><input id="e-sp" placeholder="např. čistopis, DIO…"></div>'+
+    '</div>'+
+    '<div class="mbtns">'+
+      (o._new?'':'<button class="btn del" id="e-del">Smazat</button>')+
+      '<button class="btn" id="e-cancel">Zrušit</button>'+
+      '<button class="btn save" id="e-save">Uložit</button>'+
+    '</div>';
+  $('modal').classList.remove('hidden');
+  $('e-cancel').onclick=closeEdit;
+  if($('e-del'))$('e-del').onclick=function(){if(confirm('Smazat celý tento záznam SO?')){writeObj(id,null);closeEdit();}};
+  [].forEach.call($('mbox').querySelectorAll('[data-del-send]'),function(b){
+    b.onclick=function(){var w=work.slice();w.splice(+b.dataset.delSend,1);openEditSub(id,s,o,w);};
+  });
+  $('e-save').onclick=function(){
+    var arr=work.slice();
+    var sv=$('e-sv').value.trim(),sd=$('e-sd').value||null,sp=$('e-sp').value.trim();
+    if(sd||sp)arr.push({verze:sv||String(arr.length+1),d:sd,pozn:sp});
+    var obj={so:$('e-so').value.trim(),cast:$('e-cast').value.trim(),popis:o.popis||'',sub:$('e-subname').value.trim(),odeslani:arr,poradi:o.poradi||Date.now()};
+    writeObj(o._new?null:id,obj);
+    closeEdit();
+  };
+}
+
 function writeObj(id,obj){
   if(DEMO_MODE){
     if(!DATA.objekty[curStavba])DATA.objekty[curStavba]={};
@@ -645,7 +757,7 @@ function openStavba(){
     var naz=$('s-naz').value.trim();if(!naz){alert('Zadej název.');return;}
     var id='a'+Date.now();
     var rec={nazev:naz,poradi:Date.now()};
-    if(DEMO_MODE){DATA.stavby[id]=rec;DATA.objekty[id]={RDS:{},DSPS:{}};}
+    if(DEMO_MODE){DATA.stavby[id]=rec;DATA.objekty[id]={RDS:{},DSPS:{},VTD:{},SUB:{}};}
     else{db.ref('stavby/'+id).set(rec);}
     curStavba=id;curTyp='RDS';$('smodal').classList.add('hidden');renderChips();renderCtx();render();
   };
@@ -708,7 +820,7 @@ if(DEMO_MODE){
     Object.keys(j.stavby||{}).forEach(function(sid){
       var s=j.stavby[sid];stavby[sid]={nazev:s.nazev,poradi:s.poradi||1,meta:s.meta||null};
       var typ=s.typ||'RDS';
-      objekty[sid]={RDS:{},DSPS:{}};
+      objekty[sid]={RDS:{},DSPS:{},VTD:{},SUB:{}};
       (s.objekty||[]).forEach(function(o,i){objekty[sid][typ]['o'+('00'+i).slice(-3)]=o;});
     });
     DATA.stavby=stavby;DATA.objekty=objekty;DATA.inbox={};

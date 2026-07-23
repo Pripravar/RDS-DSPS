@@ -34,7 +34,7 @@ updates.json = pole objektů. Každý:
 Pravidlo AUTO: zapíše se PŘÍMO jen když jistota=vysoká a stavbaId≠"?" a objId≠null a milnik≠null
 a daný milník je JEŠTĚ PRÁZDNÝ. Jinak (nízká jistota / nejasné / už vyplněné) → /inbox.
 """
-import json, os, sys, time, urllib.request, urllib.error, datetime, re
+import json, os, sys, time, urllib.request, urllib.error, datetime, re, unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -76,7 +76,11 @@ def post(db, path, tok, obj):
     return json.load(urllib.request.urlopen(r, timeout=30))
 
 def slug(s):
-    s = re.sub(r"[.$#\[\]/\x00-\x1f]+", "_", str(s or ""))
+    s = str(s or "")
+    # odstraň diakritiku -> ASCII (jinak neplatná/nekódovatelná Firebase cesta)
+    s = "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+    s = s.encode("ascii", "ignore").decode("ascii")
+    s = re.sub(r"[.$#\[\]/\x00-\x1f]+", "_", s)
     return re.sub(r"\s+", "_", s).strip("_")[:180] or "x"
 
 def d_iso(s):
