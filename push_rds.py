@@ -22,17 +22,23 @@ updates.json = pole objektů. Každý:
      "stavbaId": "i16-martinovice-rds" | "?" | "new",
      "nazevNew": "<přesný název z feedu>",         # jen když stavbaId=new
      "meta": { "cislo":"", "pripravar":"", "sv":"", "start":"", "finish":"", "zdroj":"feed" },
-     "typ": "RDS" | "DSPS",
+     "typ": "RDS" | "DSPS" | "VTD" | "SUB",
      "objId": "o012" | "new",
-     "so": "SO 201", "cast": "NK", "popis": "",     # když objId=new
-     "milnik": "m3" | null,                          # id milníku dle CHAIN v index.html
+     "so": "SO 201", "cast": "NK/Hrncová ložiska/…", "popis": "",   # když objId=new
+     # --- RDS/DSPS/VTD (režim milníků) ---
+     "milnik": "m3" | null,                          # id milníku dle CHAIN v index.html (VTD m1..m5)
      "d": "2026-06-19", "t": "Svoboda > Líbal (mail)",
      "chybi": "", "pozn": "",                        # volitelné (co chybí / poznámka s datem)
+     # --- SUB (režim log verzí – co jsem poslal subdodavateli) ---
+     "sub": "Kunst s.r.o.",                          # subdodavatel (doplní se když prázdný)
+     "odeslani": { "verze":"3", "d":"2026-07-01", "pozn":"čistopis" },
      "kontakt": { "jmeno":"", "mail":"", "tel":"", "role":"projektant|SUB" }
   }
 }
-Pravidlo AUTO: zapíše se PŘÍMO jen když jistota=vysoká a stavbaId≠"?" a objId≠null a milnik≠null
-a daný milník je JEŠTĚ PRÁZDNÝ. Jinak (nízká jistota / nejasné / už vyplněné) → /inbox.
+Pravidlo AUTO (milníky RDS/DSPS/VTD): zapíše se PŘÍMO jen když jistota=vysoká a stavbaId≠"?" a
+objId≠null a milnik≠null a milník je JEŠTĚ PRÁZDNÝ. Jinak → /inbox.
+Pravidlo AUTO (SUB): přidá odeslanou verzi do logu když jistota=vysoká a stavbaId≠"?" (objekt SO
+se najde podle so+cast nebo založí). Duplicitní verze+datum se přeskočí. Nejisté → /inbox.
 """
 import json, os, sys, time, urllib.request, urllib.error, datetime, re, unicodedata
 
@@ -99,16 +105,27 @@ def d_iso(s):
 def get_context(db, tok):
     stavby = get(db, "stavby", tok) or {}
     objekty = get(db, "objekty", tok) or {}
-    out = {"stavby": [], "milniky": {"RDS": ["m1..m10"], "DSPS": ["m1..m9"]}}
+    out = {"stavby": [],
+           "milniky": {"RDS": ["m1..m10"], "DSPS": ["m1..m9"],
+                       "VTD": ["m1 koncept odeslán", "m2 vrácení/připomínky", "m3 odsouhlaseno TDI",
+                               "m4 čistopis zhotovitel->TDI", "m5 čistopis TDI->zhotovitel"]},
+           "SUB": "režim log verzí: objekt má sub (subdodavatel) + odeslani[{verze,d,pozn}]"}
     for sid, s in stavby.items():
         entry = {"stavbaId": sid, "nazev": s.get("nazev", ""), "meta": s.get("meta"), "typy": {}}
-        for typ in ("RDS", "DSPS"):
+        for typ in ("RDS", "DSPS", "VTD"):
             m = (objekty.get(sid, {}) or {}).get(typ, {}) or {}
             entry["typy"][typ] = [
                 {"objId": k, "so": v.get("so"), "cast": v.get("cast") or v.get("popis"),
                  "vyplneno": sorted((v.get("milniky") or {}).keys())}
                 for k, v in sorted(m.items())
             ]
+        sub = (objekty.get(sid, {}) or {}).get("SUB", {}) or {}
+        entry["typy"]["SUB"] = [
+            {"objId": k, "so": v.get("so"), "cast": v.get("cast") or v.get("popis"),
+             "sub": v.get("sub", ""),
+             "verze": [x.get("verze") for x in (v.get("odeslani") or [])]}
+            for k, v in sorted(sub.items())
+        ]
         out["stavby"].append(entry)
     print(json.dumps(out, ensure_ascii=False, indent=1))
 
@@ -131,9 +148,9 @@ def apply_updates(db, tok, updates):
             rec = {"nazev": a["nazevNew"], "poradi": int(time.time())}
             if a.get("meta"): rec["meta"] = a["meta"]
             put(db, "stavby/" + nsid, tok, rec)
-            put(db, "objekty/" + nsid, tok, {"RDS": {}, "DSPS": {}})
+            put(db, "objekty/" + nsid, tok, {"RDS": {}, "DSPS": {}, "VTD": {}, "SUB": {}})
             sid = nsid
-            objekty.setdefault(sid, {"RDS": {}, "DSPS": {}})
+            objekty.setdefault(sid, {"RDS": {}, "DSPS": {}, "VTD": {}, "SUB": {}})
 
         # kontakt do adresáře
         k = a.get("kontakt")
@@ -141,6 +158,45 @@ def apply_updates(db, tok, updates):
             patch(db, "kontakty/" + slug(k["jmeno"].lower()), tok,
                   {"jmeno": k.get("jmeno"), "mail": k.get("mail", ""), "tel": k.get("tel", ""),
                    "role": k.get("role", ""), "akce": sid, "so": a.get("so", "")})
+
+        # ---- SUB: přidání odeslané verze do logu (co jsem poslal subdodavateli) ----
+        if typ == "SUB" and a.get("odeslani"):
+            snd = a["odeslani"]
+            sd = d_iso(snd.get("d")); sv = str(snd.get("verze") or "").strip(); sp = snd.get("pozn", "")
+            sub_ok = (jist == "vysoká" and sid and sid != "?" and (sd or sp))
+            if sub_ok:
+                # najdi/založ objekt SO v sekci SUB
+                subm = (objekty.get(sid, {}) or {}).get("SUB", {}) or {}
+                if oid and oid != "new" and oid in subm:
+                    tgt = oid; cur = subm[oid]
+                else:
+                    # zkus najít podle SO+cast, jinak založ nový
+                    tgt = next((kk for kk, vv in subm.items()
+                                if vv.get("so") == a.get("so") and (vv.get("cast") or "") == (a.get("cast") or "")), None)
+                    cur = subm.get(tgt, {}) if tgt else {}
+                    if not tgt:
+                        newobj = {"so": a.get("so", ""), "cast": a.get("cast", ""), "sub": a.get("sub", ""), "odeslani": []}
+                        tgt = post(db, "objekty/%s/SUB" % sid, tok, newobj)["name"]
+                        cur = newobj
+                arr = list(cur.get("odeslani") or [])
+                if not any((x.get("verze") == sv and d_iso(x.get("d")) == sd) for x in arr):
+                    arr.append({"verze": sv or str(len(arr) + 1), "d": sd, "pozn": sp})
+                    upd = {"odeslani": arr}
+                    if a.get("sub") and not cur.get("sub"): upd["sub"] = a["sub"]
+                    patch(db, "objekty/%s/SUB/%s" % (sid, tgt), tok, upd)
+                    post(db, "log", tok, {"ts": int(time.time() * 1000), "stavba": sid, "typ": "SUB",
+                                          "objekt": tgt, "verze": sv, "d": sd, "zdroj": u.get("zdroj", "")})
+                    direct += 1
+                else:
+                    skip += 1
+                continue
+            else:
+                if vid and vid in seen_vlakna: skip += 1; continue
+                post(db, "inbox", tok, {"vlaknoId": vid, "ts": int(time.time() * 1000),
+                    "zdroj": u.get("zdroj", u.get("predmet", "")), "stav": "novy", "jistota": jist, "typ": "SUB",
+                    "stavbaId": sid, "objId": oid, "so": a.get("so", ""), "cast": a.get("cast", ""),
+                    "popisNavrhu": "odesláno na SUB: v%s %s %s" % (sv, sd or "", sp)})
+                inbox_n += 1; continue
 
         can_direct = (jist == "vysoká" and sid and sid != "?" and oid and oid != "new" and mil and (d or t))
         cur = ((objekty.get(sid, {}) or {}).get(typ, {}) or {}).get(oid, {}) if can_direct else {}
